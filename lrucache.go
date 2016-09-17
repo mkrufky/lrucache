@@ -62,6 +62,37 @@ func (c *LruCache) Get(key string) ([]byte, bool) {
 	return value, true
 }
 
+// A supplied callback function is called with the []byte representation
+// of a cached response only if it is found within the cache.
+// A bool will be returned set to true if the key was found, false otherwise
+// The supplied callback function is called while the lock is held.
+// The mutex is unlocked after the supplied function returns.
+func (c *LruCache) GetLocked(key string, f func (*[]byte)) bool {
+	c.mu.Lock()
+
+	le, ok := c.cache[key]
+	if !ok {
+		c.mu.Unlock() // Avoiding defer overhead
+                return false
+	}
+
+	if c.MaxAge > 0 && le.Value.(*entry).expires <= time.Now().Unix() {
+		c.deleteElement(le)
+		c.maybeDeleteOldest()
+
+		c.mu.Unlock() // Avoiding defer overhead
+                return false
+	}
+
+	c.lru.MoveToBack(le)
+	if f != nil {
+		f(&le.Value.(*entry).value)
+	}
+
+	c.mu.Unlock() // Avoiding defer overhead
+	return true
+}
+
 // Set stores the []byte representation of a response for a given key.
 func (c *LruCache) Set(key string, value []byte) {
 	c.mu.Lock()
