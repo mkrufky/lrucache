@@ -119,6 +119,26 @@ func (c *LruCache) Set(key string, value []byte) {
 	c.mu.Unlock()
 }
 
+// Set stores the []byte representation of a response for a given key, only if key is not already present.
+func (c *LruCache) SetIfNewKey(key string, value []byte) {
+	c.mu.Lock()
+
+	expires := int64(0)
+	if c.MaxAge > 0 {
+		expires = time.Now().Unix() + c.MaxAge
+	}
+
+	if _, ok := c.cache[key]; !ok {
+		e := &entry{key: key, value: value, expires: expires}
+		c.cache[key] = c.lru.PushBack(e)
+		c.size += e.size()
+	}
+
+	c.maybeDeleteOldest()
+
+	c.mu.Unlock()
+}
+
 // Delete removes the value associated with a key.
 func (c *LruCache) Delete(key string) {
 	c.mu.Lock()
